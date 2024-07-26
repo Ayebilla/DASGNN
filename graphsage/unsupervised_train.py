@@ -149,7 +149,7 @@ def train(train_data, test_data=None):
     adj_info_ph = tf.placeholder(tf.int32, shape=minibatch.adj.shape)
     adj_info = tf.Variable(adj_info_ph, trainable=False, name="adj_info")
 
-    if FLAGS.model == 'graphsage_mean':
+    if FLAGS.model == 'dasgnn':
         # Create model
         sampler = UniformNeighborSampler(adj_info)
         layer_infos = [SAGEInfo("node", sampler, FLAGS.samples_1, FLAGS.dim_1),
@@ -230,6 +230,21 @@ def train(train_data, test_data=None):
                                        #2x because graphsage uses concat
                                        nodevec_dim=2*FLAGS.dim_1,
                                        lr=FLAGS.learning_rate)
+        
+    # elif FLAGS.model == 'dasgnn':
+    #     sampler = UniformNeighborSampler(adj_info)
+    #     layer_infos = [SAGEInfo("node", sampler, FLAGS.samples_1, FLAGS.dim_1),
+    #                         SAGEInfo("node", sampler, FLAGS.samples_2, FLAGS.dim_2)]
+
+    #     model = SampleAndAggregate(placeholders, 
+    #                                 features,
+    #                                 adj_info,
+    #                                 minibatch.deg,
+    #                                  layer_infos=layer_infos, 
+    #                                  aggregator_type="dasgnn",
+    #                                  model_size=FLAGS.model_size,
+    #                                  identity_dim = FLAGS.identity_dim,
+    #                                  logging=True)
     else:
         raise Exception('Error: model name unrecognized.')
 
@@ -321,55 +336,55 @@ def train(train_data, test_data=None):
 
         save_val_embeddings(sess, model, minibatch, FLAGS.validate_batch_size, log_dir())
 
-        if FLAGS.model == "n2v":
-            # stopping the gradient for the already trained nodes
-            train_ids = tf.constant([[id_map[n]] for n in G.nodes_iter() if not G.node[n]['val'] and not G.node[n]['test']],
-                    dtype=tf.int32)
-            test_ids = tf.constant([[id_map[n]] for n in G.nodes_iter() if G.node[n]['val'] or G.node[n]['test']], 
-                    dtype=tf.int32)
-            update_nodes = tf.nn.embedding_lookup(model.context_embeds, tf.squeeze(test_ids))
-            no_update_nodes = tf.nn.embedding_lookup(model.context_embeds,tf.squeeze(train_ids))
-            update_nodes = tf.scatter_nd(test_ids, update_nodes, tf.shape(model.context_embeds))
-            no_update_nodes = tf.stop_gradient(tf.scatter_nd(train_ids, no_update_nodes, tf.shape(model.context_embeds)))
-            model.context_embeds = update_nodes + no_update_nodes
-            sess.run(model.context_embeds)
+        # if FLAGS.model == "n2v":
+        #     # stopping the gradient for the already trained nodes
+        #     train_ids = tf.constant([[id_map[n]] for n in G.nodes_iter() if not G.node[n]['val'] and not G.node[n]['test']],
+        #             dtype=tf.int32)
+        #     test_ids = tf.constant([[id_map[n]] for n in G.nodes_iter() if G.node[n]['val'] or G.node[n]['test']], 
+        #             dtype=tf.int32)
+        #     update_nodes = tf.nn.embedding_lookup(model.context_embeds, tf.squeeze(test_ids))
+        #     no_update_nodes = tf.nn.embedding_lookup(model.context_embeds,tf.squeeze(train_ids))
+        #     update_nodes = tf.scatter_nd(test_ids, update_nodes, tf.shape(model.context_embeds))
+        #     no_update_nodes = tf.stop_gradient(tf.scatter_nd(train_ids, no_update_nodes, tf.shape(model.context_embeds)))
+        #     model.context_embeds = update_nodes + no_update_nodes
+        #     sess.run(model.context_embeds)
 
-            # run random walks
-            from graphsage.utils import run_random_walks
-            nodes = [n for n in G.nodes_iter() if G.node[n]["val"] or G.node[n]["test"]]
-            start_time = time.time()
-            pairs = run_random_walks(G, nodes, num_walks=50)
-            walk_time = time.time() - start_time
+        #     # run random walks
+        #     from graphsage.utils import run_random_walks
+        #     nodes = [n for n in G.nodes_iter() if G.node[n]["val"] or G.node[n]["test"]]
+        #     start_time = time.time()
+        #     pairs = run_random_walks(G, nodes, num_walks=50)
+        #     walk_time = time.time() - start_time
 
-            test_minibatch = EdgeMinibatchIterator(G, 
-                id_map,
-                placeholders, batch_size=FLAGS.batch_size,
-                max_degree=FLAGS.max_degree, 
-                num_neg_samples=FLAGS.neg_sample_size,
-                context_pairs = pairs,
-                n2v_retrain=True,
-                fixed_n2v=True)
+        #     test_minibatch = EdgeMinibatchIterator(G, 
+        #         id_map,
+        #         placeholders, batch_size=FLAGS.batch_size,
+        #         max_degree=FLAGS.max_degree, 
+        #         num_neg_samples=FLAGS.neg_sample_size,
+        #         context_pairs = pairs,
+        #         n2v_retrain=True,
+        #         fixed_n2v=True)
             
-            start_time = time.time()
-            print("Doing test training for n2v.")
-            test_steps = 0
-            for epoch in range(FLAGS.n2v_test_epochs):
-                test_minibatch.shuffle()
-                while not test_minibatch.end():
-                    feed_dict = test_minibatch.next_minibatch_feed_dict()
-                    feed_dict.update({placeholders['dropout']: FLAGS.dropout})
-                    outs = sess.run([model.opt_op, model.loss, model.ranks, model.aff_all, 
-                        model.mrr, model.outputs1], feed_dict=feed_dict)
-                    if test_steps % FLAGS.print_every == 0:
-                        print("Iter:", '%04d' % test_steps, 
-                              "train_loss=", "{:.5f}".format(outs[1]),
-                              "train_mrr=", "{:.5f}".format(outs[-2]))
-                    test_steps += 1
-            train_time = time.time() - start_time
-            save_val_embeddings(sess, model, minibatch, FLAGS.validate_batch_size, log_dir(), mod="-test")
-            print("Total time: ", train_time+walk_time)
-            print("Walk time: ", walk_time)
-            print("Train time: ", train_time)
+        #     start_time = time.time()
+        #     print("Doing test training for n2v.")
+        #     test_steps = 0
+        #     for epoch in range(FLAGS.n2v_test_epochs):
+        #         test_minibatch.shuffle()
+        #         while not test_minibatch.end():
+        #             feed_dict = test_minibatch.next_minibatch_feed_dict()
+        #             feed_dict.update({placeholders['dropout']: FLAGS.dropout})
+        #             outs = sess.run([model.opt_op, model.loss, model.ranks, model.aff_all, 
+        #                 model.mrr, model.outputs1], feed_dict=feed_dict)
+        #             if test_steps % FLAGS.print_every == 0:
+        #                 print("Iter:", '%04d' % test_steps, 
+        #                       "train_loss=", "{:.5f}".format(outs[1]),
+        #                       "train_mrr=", "{:.5f}".format(outs[-2]))
+        #             test_steps += 1
+        #     train_time = time.time() - start_time
+        #     save_val_embeddings(sess, model, minibatch, FLAGS.validate_batch_size, log_dir(), mod="-test")
+        #     print("Total time: ", train_time+walk_time)
+        #     print("Walk time: ", walk_time)
+        #     print("Train time: ", train_time)
 
     
 

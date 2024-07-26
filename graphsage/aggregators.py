@@ -116,253 +116,8 @@ class GCNAggregator(Layer):
         return self.act(output)
 
 
-class MaxPoolingAggregator(Layer):
-    """ Aggregates via max-pooling over MLP functions.
-    """
-    def __init__(self, input_dim, output_dim, model_size="small", neigh_input_dim=None,
-            dropout=0., bias=False, act=tf.nn.relu, name=None, concat=False, **kwargs):
-        super(MaxPoolingAggregator, self).__init__(**kwargs)
-
-        self.dropout = dropout
-        self.bias = bias
-        self.act = act
-        self.concat = concat
-
-        if neigh_input_dim is None:
-            neigh_input_dim = input_dim
-
-        if name is not None:
-            name = '/' + name
-        else:
-            name = ''
-
-        if model_size == "small":
-            hidden_dim = self.hidden_dim = 512
-        elif model_size == "big":
-            hidden_dim = self.hidden_dim = 1024
-
-        self.mlp_layers = []
-        self.mlp_layers.append(Dense(input_dim=neigh_input_dim,
-                                 output_dim=hidden_dim,
-                                 act=tf.nn.relu,
-                                 dropout=dropout,
-                                 sparse_inputs=False,
-                                 logging=self.logging))
-
-        with tf.variable_scope(self.name + name + '_vars'):
-            self.vars['neigh_weights'] = glorot([hidden_dim, output_dim],
-                                                        name='neigh_weights')
-           
-            self.vars['self_weights'] = glorot([input_dim, output_dim],
-                                                        name='self_weights')
-            if self.bias:
-                self.vars['bias'] = zeros([self.output_dim], name='bias')
-
-        if self.logging:
-            self._log_vars()
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.neigh_input_dim = neigh_input_dim
-
-    def _call(self, inputs):
-        self_vecs, neigh_vecs = inputs
-        neigh_h = neigh_vecs
-
-        dims = tf.shape(neigh_h)
-        batch_size = dims[0]
-        num_neighbors = dims[1]
-        # [nodes * sampled neighbors] x [hidden_dim]
-        h_reshaped = tf.reshape(neigh_h, (batch_size * num_neighbors, self.neigh_input_dim))
-
-        for l in self.mlp_layers:
-            h_reshaped = l(h_reshaped)
-        neigh_h = tf.reshape(h_reshaped, (batch_size, num_neighbors, self.hidden_dim))
-        neigh_h = tf.reduce_max(neigh_h, axis=1)
-        
-        from_neighs = tf.matmul(neigh_h, self.vars['neigh_weights'])
-        from_self = tf.matmul(self_vecs, self.vars["self_weights"])
-        
-        if not self.concat:
-            output = tf.add_n([from_self, from_neighs])
-        else:
-            output = tf.concat([from_self, from_neighs], axis=1)
-
-        # bias
-        if self.bias:
-            output += self.vars['bias']
-       
-        return self.act(output)
-
-class MeanPoolingAggregator(Layer):
-    """ Aggregates via mean-pooling over MLP functions.
-    """
-    def __init__(self, input_dim, output_dim, model_size="small", neigh_input_dim=None,
-            dropout=0., bias=False, act=tf.nn.relu, name=None, concat=False, **kwargs):
-        super(MeanPoolingAggregator, self).__init__(**kwargs)
-
-        self.dropout = dropout
-        self.bias = bias
-        self.act = act
-        self.concat = concat
-
-        if neigh_input_dim is None:
-            neigh_input_dim = input_dim
-
-        if name is not None:
-            name = '/' + name
-        else:
-            name = ''
-
-        if model_size == "small":
-            hidden_dim = self.hidden_dim = 512
-        elif model_size == "big":
-            hidden_dim = self.hidden_dim = 1024
-
-        self.mlp_layers = []
-        self.mlp_layers.append(Dense(input_dim=neigh_input_dim,
-                                 output_dim=hidden_dim,
-                                 act=tf.nn.relu,
-                                 dropout=dropout,
-                                 sparse_inputs=False,
-                                 logging=self.logging))
-
-        with tf.variable_scope(self.name + name + '_vars'):
-            self.vars['neigh_weights'] = glorot([hidden_dim, output_dim],
-                                                        name='neigh_weights')
-           
-            self.vars['self_weights'] = glorot([input_dim, output_dim],
-                                                        name='self_weights')
-            if self.bias:
-                self.vars['bias'] = zeros([self.output_dim], name='bias')
-
-        if self.logging:
-            self._log_vars()
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.neigh_input_dim = neigh_input_dim
-
-    def _call(self, inputs):
-        self_vecs, neigh_vecs = inputs
-        neigh_h = neigh_vecs
-
-        dims = tf.shape(neigh_h)
-        batch_size = dims[0]
-        num_neighbors = dims[1]
-        # [nodes * sampled neighbors] x [hidden_dim]
-        h_reshaped = tf.reshape(neigh_h, (batch_size * num_neighbors, self.neigh_input_dim))
-
-        for l in self.mlp_layers:
-            h_reshaped = l(h_reshaped)
-        neigh_h = tf.reshape(h_reshaped, (batch_size, num_neighbors, self.hidden_dim))
-        neigh_h = tf.reduce_mean(neigh_h, axis=1)
-        
-        from_neighs = tf.matmul(neigh_h, self.vars['neigh_weights'])
-        from_self = tf.matmul(self_vecs, self.vars["self_weights"])
-        
-        if not self.concat:
-            output = tf.add_n([from_self, from_neighs])
-        else:
-            output = tf.concat([from_self, from_neighs], axis=1)
-
-        # bias
-        if self.bias:
-            output += self.vars['bias']
-       
-        return self.act(output)
-
-
-class TwoMaxLayerPoolingAggregator(Layer):
-    """ Aggregates via pooling over two MLP functions.
-    """
-    def __init__(self, input_dim, output_dim, model_size="small", neigh_input_dim=None,
-            dropout=0., bias=False, act=tf.nn.relu, name=None, concat=False, **kwargs):
-        super(TwoMaxLayerPoolingAggregator, self).__init__(**kwargs)
-
-        self.dropout = dropout
-        self.bias = bias
-        self.act = act
-        self.concat = concat
-
-        if neigh_input_dim is None:
-            neigh_input_dim = input_dim
-
-        if name is not None:
-            name = '/' + name
-        else:
-            name = ''
-
-        if model_size == "small":
-            hidden_dim_1 = self.hidden_dim_1 = 512
-            hidden_dim_2 = self.hidden_dim_2 = 256
-        elif model_size == "big":
-            hidden_dim_1 = self.hidden_dim_1 = 1024
-            hidden_dim_2 = self.hidden_dim_2 = 512
-
-        self.mlp_layers = []
-        self.mlp_layers.append(Dense(input_dim=neigh_input_dim,
-                                 output_dim=hidden_dim_1,
-                                 act=tf.nn.relu,
-                                 dropout=dropout,
-                                 sparse_inputs=False,
-                                 logging=self.logging))
-        self.mlp_layers.append(Dense(input_dim=hidden_dim_1,
-                                 output_dim=hidden_dim_2,
-                                 act=tf.nn.relu,
-                                 dropout=dropout,
-                                 sparse_inputs=False,
-                                 logging=self.logging))
-
-
-        with tf.variable_scope(self.name + name + '_vars'):
-            self.vars['neigh_weights'] = glorot([hidden_dim_2, output_dim],
-                                                        name='neigh_weights')
-           
-            self.vars['self_weights'] = glorot([input_dim, output_dim],
-                                                        name='self_weights')
-            if self.bias:
-                self.vars['bias'] = zeros([self.output_dim], name='bias')
-
-        if self.logging:
-            self._log_vars()
-
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.neigh_input_dim = neigh_input_dim
-
-    def _call(self, inputs):
-        self_vecs, neigh_vecs = inputs
-        neigh_h = neigh_vecs
-
-        dims = tf.shape(neigh_h)
-        batch_size = dims[0]
-        num_neighbors = dims[1]
-        # [nodes * sampled neighbors] x [hidden_dim]
-        h_reshaped = tf.reshape(neigh_h, (batch_size * num_neighbors, self.neigh_input_dim))
-
-        for l in self.mlp_layers:
-            h_reshaped = l(h_reshaped)
-        neigh_h = tf.reshape(h_reshaped, (batch_size, num_neighbors, self.hidden_dim_2))
-        neigh_h = tf.reduce_max(neigh_h, axis=1)
-        
-        from_neighs = tf.matmul(neigh_h, self.vars['neigh_weights'])
-        from_self = tf.matmul(self_vecs, self.vars["self_weights"])
-        
-        if not self.concat:
-            output = tf.add_n([from_self, from_neighs])
-        else:
-            output = tf.concat([from_self, from_neighs], axis=1)
-
-        # bias
-        if self.bias:
-            output += self.vars['bias']
-       
-        return self.act(output)
-
 class SeqAggregator(Layer):
-    """ Aggregates via a standard LSTM.
-    """
+    """ Aggregates via a standard LSTM."""
     def __init__(self, input_dim, output_dim, model_size="small", neigh_input_dim=None,
             dropout=0., bias=False, act=tf.nn.relu, name=None,  concat=False, **kwargs):
         super(SeqAggregator, self).__init__(**kwargs)
@@ -447,4 +202,161 @@ class SeqAggregator(Layer):
             output += self.vars['bias']
        
         return self.act(output)
+    
+###########################################
+class DASGNNAggregator(Layer):
+    """
+    DAS-GNN Aggregator that dynamically adjusts aggregation structure using attention mechanisms.
+    """
+
+    def __init__(self, input_dim, output_dim, neigh_input_dim=None,
+                 dropout=0., bias=False, act=tf.nn.relu, name=None, concat=False, num_sampled_neighbors=0, **kwargs):
+        super(DASGNNAggregator, self).__init__(**kwargs)
+
+        self.dropout = dropout
+        self.bias = bias
+        self.act = act
+        self.concat = concat
+        self.num_sampled_neighbors = num_sampled_neighbors
+
+        if neigh_input_dim is None:
+            neigh_input_dim = input_dim
+
+        self.neigh_input_dim = neigh_input_dim
+
+        if name is not None:
+            name = '/' + name
+        else:
+            name = ''
+
+        with tf.variable_scope(self.name + name + '_vars'):
+            self.vars['self_weights'] = tf.get_variable('self_weights', shape=[input_dim, output_dim],
+                                                        initializer=tf.glorot_uniform_initializer())
+            self.vars['neigh_weights'] = tf.get_variable('neigh_weights', shape=[neigh_input_dim, output_dim],
+                                                         initializer=tf.glorot_uniform_initializer())
+            self.vars['attention_weights'] = tf.get_variable('attention_weights', shape=[output_dim, 1],
+                                                             initializer=tf.glorot_uniform_initializer())
+            if self.bias:
+                self.vars['bias'] = tf.get_variable('bias', shape=[output_dim], initializer=tf.zeros_initializer())
+
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+    def _call(self, inputs):
+        self_vecs, neigh_vecs = inputs
+
+        self_vecs = tf.nn.dropout(self_vecs, 1 - self.dropout)
+        neigh_vecs = tf.nn.dropout(neigh_vecs, 1 - self.dropout)
+
+        # Transform self and neighbor vectors
+        self_transformed = tf.matmul(self_vecs, self.vars['self_weights'])
+        neigh_transformed = tf.matmul(tf.reshape(neigh_vecs, [-1, self.neigh_input_dim]), self.vars['neigh_weights'])
+        neigh_transformed = tf.reshape(neigh_transformed, [-1, tf.shape(neigh_vecs)[1], self.output_dim])
+
+        # Compute attention scores
+        expanded_self_transformed = tf.expand_dims(self_transformed, axis=1)
+        concat_self_neigh = tf.concat([expanded_self_transformed, neigh_transformed], axis=1)
+
+        attention_logits = tf.nn.relu(tf.matmul(tf.reshape(concat_self_neigh, [-1, self.output_dim]), self.vars['attention_weights']))
+        attention_logits = tf.reshape(attention_logits, [-1, tf.shape(concat_self_neigh)[1], 1])
+        attention_scores = tf.nn.softmax(attention_logits, dim=1)
+
+        # Sample neighbors based on attention scores
+        top_k_values, top_k_indices = tf.nn.top_k(attention_scores[:, 1:, 0], k=self.num_sampled_neighbors)
+        batch_indices = tf.reshape(tf.range(tf.shape(attention_scores)[0]), [-1, 1, 1])
+        batch_indices = tf.tile(batch_indices, [1, self.num_sampled_neighbors, 1])
+        gather_indices = tf.concat([batch_indices, tf.expand_dims(top_k_indices, axis=-1)], axis=-1)
+        sampled_neighs = tf.gather_nd(neigh_transformed, gather_indices)
+        sampled_attention_scores = tf.gather_nd(attention_scores[:, 1:, :], gather_indices)
+
+        # Aggregate sampled neighbor vectors with attention scores
+        weighted_neighs = sampled_neighs * sampled_attention_scores
+        neigh_aggregated = tf.reduce_sum(weighted_neighs, axis=1)
+
+        if not self.concat:
+            output = tf.add(self_transformed, neigh_aggregated)
+        else:
+            output = tf.concat([self_transformed, neigh_aggregated], axis=1)
+
+        if self.bias:
+            output += self.vars['bias']
+
+        return self.act(output)
+
+
+# class DASGNNAggregator(Layer):
+#     """
+#     DAS-GNN Aggregator that dynamically adjusts aggregation structure using attention mechanisms.
+#     """
+
+#     def __init__(self, input_dim, output_dim, neigh_input_dim=None,
+#                  dropout=0., bias=False, act=tf.nn.relu, name=None, concat=False, threshold=0.001, **kwargs):
+#         super(DASGNNAggregator, self).__init__(**kwargs)
+
+#         self.dropout = dropout
+#         self.bias = bias
+#         self.act = act
+#         self.concat = concat
+#         self.threshold = threshold
+
+#         if neigh_input_dim is None:
+#             neigh_input_dim = input_dim
+
+#         self.neigh_input_dim = neigh_input_dim
+
+#         if name is not None:
+#             name = '/' + name
+#         else:
+#             name = ''
+
+#         with tf.variable_scope(self.name + name + '_vars'):
+#             self.vars['self_weights'] = tf.get_variable('self_weights', shape=[input_dim, output_dim],
+#                                                         initializer=tf.glorot_uniform_initializer())
+#             self.vars['neigh_weights'] = tf.get_variable('neigh_weights', shape=[neigh_input_dim, output_dim],
+#                                                          initializer=tf.glorot_uniform_initializer())
+#             self.vars['attention_weights'] = tf.get_variable('attention_weights', shape=[output_dim, 1],
+#                                                              initializer=tf.glorot_uniform_initializer())
+#             if self.bias:
+#                 self.vars['bias'] = tf.get_variable('bias', shape=[output_dim], initializer=tf.zeros_initializer())
+
+#         self.input_dim = input_dim
+#         self.output_dim = output_dim
+
+#     def _call(self, inputs):
+#         self_vecs, neigh_vecs = inputs
+
+#         self_vecs = tf.nn.dropout(self_vecs, 1 - self.dropout)
+#         neigh_vecs = tf.nn.dropout(neigh_vecs, 1 - self.dropout)
+
+#         # Transform self and neighbor vectors
+#         self_transformed = tf.matmul(self_vecs, self.vars['self_weights'])
+#         neigh_transformed = tf.matmul(tf.reshape(neigh_vecs, [-1, self.neigh_input_dim]), self.vars['neigh_weights'])
+#         neigh_transformed = tf.reshape(neigh_transformed, [-1, tf.shape(neigh_vecs)[1], self.output_dim])
+
+#         # Compute attention scores
+#         expanded_self_transformed = tf.expand_dims(self_transformed, axis=1)
+#         concat_self_neigh = tf.concat([expanded_self_transformed, neigh_transformed], axis=1)
+
+#         attention_logits = tf.nn.relu(tf.matmul(tf.reshape(concat_self_neigh, [-1, self.output_dim]), self.vars['attention_weights']))
+#         attention_logits = tf.reshape(attention_logits, [-1, tf.shape(concat_self_neigh)[1], 1])
+#         attention_scores = tf.nn.softmax(attention_logits, dim=1)
+
+#         # Filter neighbors based on attention scores and threshold
+#         filtered_neigh_indices = tf.where(attention_scores[:, 1:, 0] > self.threshold)
+#         filtered_attention_scores = tf.gather_nd(attention_scores[:, 1:, :], filtered_neigh_indices)
+#         filtered_neighs = tf.gather_nd(neigh_transformed, filtered_neigh_indices)
+
+#         # Aggregate filtered neighbor vectors with attention scores
+#         weighted_neighs = filtered_neighs * filtered_attention_scores
+#         neigh_aggregated = tf.reduce_sum(weighted_neighs, axis=1)
+
+#         if not self.concat:
+#             output = tf.add(self_transformed, neigh_aggregated)
+#         else:
+#             output = tf.concat([self_transformed, neigh_aggregated], axis=1)
+
+#         if self.bias:
+#             output += self.vars['bias']
+
+#         return self.act(output)
 

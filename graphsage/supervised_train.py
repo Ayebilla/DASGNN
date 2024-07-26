@@ -201,9 +201,8 @@ def train(train_data, test_data=None):
                                      model_size=FLAGS.model_size,
                                      sigmoid_loss = FLAGS.sigmoid,
                                      identity_dim = FLAGS.identity_dim,
-                                     logging=True)
-
-    elif FLAGS.model == 'graphsage_maxpool':
+                                      logging=True)
+    elif FLAGS.model == 'dasgnn':
         sampler = UniformNeighborSampler(adj_info)
         layer_infos = [SAGEInfo("node", sampler, FLAGS.samples_1, FLAGS.dim_1),
                             SAGEInfo("node", sampler, FLAGS.samples_2, FLAGS.dim_2)]
@@ -213,27 +212,12 @@ def train(train_data, test_data=None):
                                     adj_info,
                                     minibatch.deg,
                                      layer_infos=layer_infos, 
-                                     aggregator_type="maxpool",
+                                     aggregator_type="dasgnn",
                                      model_size=FLAGS.model_size,
                                      sigmoid_loss = FLAGS.sigmoid,
                                      identity_dim = FLAGS.identity_dim,
                                      logging=True)
 
-    elif FLAGS.model == 'graphsage_meanpool':
-        sampler = UniformNeighborSampler(adj_info)
-        layer_infos = [SAGEInfo("node", sampler, FLAGS.samples_1, FLAGS.dim_1),
-                            SAGEInfo("node", sampler, FLAGS.samples_2, FLAGS.dim_2)]
-
-        model = SupervisedGraphsage(num_classes, placeholders, 
-                                    features,
-                                    adj_info,
-                                    minibatch.deg,
-                                     layer_infos=layer_infos, 
-                                     aggregator_type="meanpool",
-                                     model_size=FLAGS.model_size,
-                                     sigmoid_loss = FLAGS.sigmoid,
-                                     identity_dim = FLAGS.identity_dim,
-                                     logging=True)
 
     else:
         raise Exception('Error: model name unrecognized.')

@@ -7,7 +7,7 @@ import graphsage.layers as layers
 import graphsage.metrics as metrics
 
 from .prediction import BipartiteEdgePredLayer
-from .aggregators import MeanAggregator, MaxPoolingAggregator, MeanPoolingAggregator, SeqAggregator, GCNAggregator
+from .aggregators import MeanAggregator, SeqAggregator, GCNAggregator, DASGNNAggregator
 
 flags = tf.app.flags
 FLAGS = flags.FLAGS
@@ -212,12 +212,10 @@ class SampleAndAggregate(GeneralizedModel):
             self.aggregator_cls = MeanAggregator
         elif aggregator_type == "seq":
             self.aggregator_cls = SeqAggregator
-        elif aggregator_type == "maxpool":
-            self.aggregator_cls = MaxPoolingAggregator
-        elif aggregator_type == "meanpool":
-            self.aggregator_cls = MeanPoolingAggregator
         elif aggregator_type == "gcn":
             self.aggregator_cls = GCNAggregator
+        elif aggregator_type == "dasgnn":
+            self.aggregator_cls = DASGNNAggregator
         else:
             raise Exception("Unknown aggregator: ", self.aggregator_cls)
 
@@ -273,6 +271,7 @@ class SampleAndAggregate(GeneralizedModel):
             samples.append(tf.reshape(node, [support_size * batch_size,]))
             support_sizes.append(support_size)
         return samples, support_sizes
+
 
 
     def aggregate(self, samples, input_features, dims, num_samples, support_sizes, batch_size=None,
